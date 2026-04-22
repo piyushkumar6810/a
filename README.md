@@ -1,78 +1,75 @@
-# ⚡ Power Demand Forecasting
+# Power Demand Forecasting
 
-Predicts the **next hour's electricity demand (MW)** on the national grid using historical demand, weather, and economic data.
+## What project does
 
----
+I tried to predict the next hour's electricity demand on the national grid using past data. So basically if we know the demand till now, can we guess what it will be in the next hour. That is the goal.
 
-## 📁 Files Needed
 
-Put these files in the same folder as the script:
 
-```
-power_demand_forecast.py
-PGCB_date_power_demand.xlsx
-weather_data.xlsx
-economic_full_1.csv
-```
+## Files I used
 
----
+- PGCB_date_power_demand.xlsx - this has hourly electricity demand data
+- weather_data.xlsx - this has temperature, humidity, rain etc for each hour
+- economic_full_1.csv - this has yearly economic data like GDP, electricity access etc
 
-## ▶️ How to Run
 
-**1. Install dependencies**
-```bash
-pip install pandas numpy matplotlib xgboost scikit-learn openpyxl
-```
 
-**2. Run the script**
-```bash
-python power_demand_forecast.py
-```
+## What I did step by step
 
-**3. Output**
-- Prints `MAPE` and `MAE` scores in the terminal
-- Saves two plots in the same folder:
-  - `actual_vs_predicted.png` — first 7 days of 2024
-  - `feature_importance.png` — top 15 features driving demand
+## Loading and cleaning demand data
 
----
+I loaded the demand file and noticed some rows had :30 timestamps (like 5:30, 6:30) along with the normal hourly ones. So I combined them into one hourly value using a weighted average where I gave 2/3 weight to the hourly reading and 1/3 to the half hourly one.
 
-## 🧠 How It Works (Simple Explanation)
+Then I found some hours were completely missing so I just filled them using the previous hour value (forward fill).
 
-| Step | What happens |
-|---|---|
-| **Load** | Reads demand, weather, and economic data |
-| **Clean** | Fixes half-hourly timestamps, fills gaps, removes spikes |
-| **Features** | Creates hour/day/month flags + lag & rolling demand values |
-| **Split** | Train on 2015–2023, Test on 2024 (no shuffling) |
-| **Model** | XGBoost regression (classical ML, no deep learning) |
-| **Evaluate** | Reports MAPE — lower % = better |
+I also removed extreme outliers using the IQR(interquartile range) method. Basically any value too far from normal range I replaced with NaN and then filled using interpolation.
 
----
+## Loading weather data
 
-## 📊 Key Features Used
+The weather file had 3 rows of metadata at the top so I skipped them. Then I renamed the columns to simple names(like as they also showed _mm and degree ) and made it hourly.
 
-- `lag_1h` to `lag_168h` — past demand values (1 hour ago up to 1 week ago)
-- `roll_mean_24h` — average demand over last 24 hours
-- `hour`, `month`, `is_weekend` — time of day / week / year
-- `temp`, `humidity` — weather affects AC and heating load
-- `gdp_usd`, `elec_access` — long-term economic growth signals
+## Loading economic data
 
----
+This file had yearly data in wide format where each year was a column. I picked 3 indicators that seemed useful to me - electricity access, power consumption per person and GDP. Then I converted it to long format and merged it with the hourly data by matching the year.
 
-## 📈 Metric
+## Feature engineering
 
-**MAPE (Mean Absolute Percentage Error)**
-- `< 5%` → Excellent
-- `5–10%` → Good
-- `> 10%` → Needs improvement
+ Since XGBoost does not understand time on its own I had to manually create features that capture time patterns.
 
----
+I added hour, day of week, month, and whether it is a weekend or not.
 
-## 🗂️ Dataset Sources
+I also added cyclical features for hour using sin and cos because hour 23 and hour 0 are actually close to each other and normal numbers would not capture that.
 
-| File | Description |
-|---|---|
-| `PGCB_date_power_demand.xlsx` | Hourly demand & generation data (target variable) |
-| `weather_data.xlsx` | Hourly temperature, humidity, precipitation |
-| `economic_full_1.csv` | Annual World Bank macroeconomic indicators |
+Then I added lag features which are just past demand values. Like what was the demand 1 hour ago, 2 hours ago, 24 hours ago, 1 week ago etc. These are very useful because demand usually follows a pattern.
+
+I also added rolling averages like average demand in last 3 hours, 24 hours, and 1 week.
+
+I added temperature squared because both very hot and very cold weather increases electricity demand due to AC and heating, so the relationship is not linear.
+
+I also added how much demand changed in last 1 hour and last 24 hours.
+
+The target column is just next hour demand which I created by shifting demand by -1.
+
+## Train test split
+
+I trained the model on data from 2015 to 2023 and tested it on 2024. I did not shuffle the data because time series data should always be split in order otherwise you are using future data to predict the past .
+
+## Model
+
+I used XGBoost which is a tree based model. I used 1000 trees with a low learning rate of 0.03 so it learns slowly but better. I also added some regularization to avoid overfitting.
+
+## Results
+
+The model gives MAPE score on 2024 test data. MAPE is mean absolute percentage error .I got mape as 4.97%.
+
+I also plotted actual vs predicted for the first 7 days of 2024 and a feature importance chart showing which features the model used the most.
+
+
+
+## lib needed to be downloaded.
+
+
+pip install pandas numpy matplotlib xgboost scikit-learn openpyxl.
+
+
+Then just run the notebook cell by cell.
